@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Optional headless worker. `dotline worker --cwd DIR` answers messages that no
+  interactive session claimed within `--grace` minutes (default 5). It uses the
+  Claude Agent SDK via the new `agent` extra (`pip install 'dotline[agent]'`), so
+  the core keeps no runtime dependencies. The agent is read-only (Read, Grep,
+  Glob confined to `--cwd`) and loads no user settings or MCP servers. It is
+  bounded by `--max-turns` and `--max-budget-usd`, and its replies say they came
+  from the worker. A failed answer leaves the message for an interactive
+  session once the claim lapses.
+
 ## 0.1.1 — 2026-09-30
 
 - Idempotent sends. `POST /v1/messages` accepts an optional `client_id` (1 to 64

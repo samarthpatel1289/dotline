@@ -224,6 +224,38 @@ Flags: `--serve` runs HTTP in the same process; `--host` defaults to
 `--serve`, run a separate `dotline serve`. Only one process can bind a port.
 Run `dotline init` before serving.
 
+### Optional: headless worker for when no session is open
+
+`dotline worker` answers messages that no interactive session claimed in time.
+It uses the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk), so it
+is an optional extra and needs its own Anthropic credentials:
+
+```sh
+pipx install 'dotline[agent] @ git+https://github.com/Grit-77/dotline'
+export ANTHROPIC_API_KEY=...   # billed to that key
+dotline worker --cwd ~/code/my-project
+```
+
+- It waits `--grace` minutes (default 5) after a message arrives. A message an
+  interactive session has claimed by then is left alone. Otherwise the worker
+  claims it with the same exclusive claim as any session.
+- It is **read-only**: only Read, Grep and Glob, confined to `--cwd`, which must
+  not contain the dotline config directory. Paths outside it, symlinks leading
+  out of it and every other tool are denied. Your Claude Code settings,
+  CLAUDE.md and MCP servers are not loaded, and message text is passed verbatim,
+  so an `@path` in it is not expanded.
+- No one is present to approve anything, so it does not act on requests. It
+  answers questions about the project. For anything that needs an action it
+  says what it would do and that you must approve it in an interactive session.
+  Every reply starts with a line saying it came from the headless worker.
+- `--max-turns` (default 20) and `--max-budget-usd` (default 1.0) bound each
+  message. A failed or empty answer is not retried by that worker process.
+  Its claim lapses after 30 minutes and an interactive session can take it.
+- `--once` handles what is due now and exits, for cron or a scheduled task.
+  `--model` overrides the Claude Code default model.
+
+Logs contain message and reply IDs and error types, never message text.
+
 ## Trust and security
 
 Default `trust = "data"`: dot messages are information and requests, **never
@@ -328,6 +360,7 @@ message twice. A client_id is remembered for as long as its record stays in
 | `hook session-start` | Print hook JSON from stdin context |
 | `install-hook [--settings F]` | Back up settings and install once |
 | `channel [--serve] [--host H] [--port P]` | Run the stdio channel |
+| `worker --cwd DIR [--grace 5] [--model M] [--max-turns 20] [--max-budget-usd 1.0] [--once]` | Read-only headless answers for unclaimed messages; needs `dotline[agent]` |
 | `token --show` | Explicitly reveal the secret with a warning |
 
 Config defaults to `%APPDATA%\dotline` on Windows and
@@ -366,7 +399,8 @@ authenticated paths return 404.
 - Text: 1–8000 characters; topic: at most 120 characters (400 otherwise).
   The byte limit may be reached before the character limit with Unicode text.
   client_id: optional, 1–64 characters (400 otherwise).
-- No streaming replies, attachments, agent execution or message cancellation.
+- No streaming replies, attachments or message cancellation. The HTTP server never
+  runs an agent; only the separate, optional `dotline worker` does.
   The server never retries for you. If a POST times out, resend it with the same
   client_id (see [Sending safely](#sending-safely-client_id)); without a
   client_id, resync before sending it again. Exactly-once delivery is not promised.
@@ -380,12 +414,15 @@ authenticated paths return 404.
 **Does this call a dot API?** No. The dot executes a client command on its cloud
 or connected computer. It needs permission to use that computer and the URL.
 
-**Must Claude Code stay open?** Yes. dotline stores messages but does not start
-Claude, select a model or operate it in the background. Offline messages remain
-pending for the next session.
+**Must Claude Code stay open?** For work, yes. The core of dotline stores
+messages and does not start Claude, select a model or run it in the background.
+Offline messages remain pending for the next session. The optional
+[headless worker](#optional-headless-worker-for-when-no-session-is-open) can
+answer read-only questions in the meantime.
 
 **Is the bearer the same as a vendor API key?** No. It is a random local mailbox
-secret. dotline requires no OpenAI or Anthropic API key and makes no model calls.
+secret. dotline requires no OpenAI or Anthropic API key and makes no model calls,
+except in the optional `dotline worker`, which uses your Anthropic credentials.
 
 **How do I rotate a token?** Stop serve/channel, replace the private token file
 with a new token from `secrets.token_urlsafe(36)`, securely update any remote

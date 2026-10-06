@@ -57,6 +57,15 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("health", help="Check HTTP availability without sending the token")
     hook = commands.add_parser("hook", help="Print Claude Code hook JSON without network access")
     hook.add_argument("event", choices=["session-start"])
+    worker = commands.add_parser(
+        "worker", help="Answer messages no session claimed in time, read-only (needs dotline[agent])"
+    )
+    worker.add_argument("--cwd", type=Path, required=True, help="Project directory the worker may read")
+    worker.add_argument("--grace", type=float, default=5, help="Minutes a message waits for a session (default: 5)")
+    worker.add_argument("--model", help="Claude model (default: the Claude Code default)")
+    worker.add_argument("--max-turns", type=int, default=20, help="Agent turns per message (default: 20)")
+    worker.add_argument("--max-budget-usd", type=float, default=1.0, help="Spend cap per message (default: 1.0)")
+    worker.add_argument("--once", action="store_true", help="Handle what is due now, then exit")
     installer = commands.add_parser("install-hook", help="Back up and add the SessionStart hook once")
     installer.add_argument("--settings", type=Path, help="Override the Claude Code settings.json path")
     return root
@@ -128,6 +137,20 @@ def dispatch(args) -> int:
     elif args.command == "install-hook":
         path, changed = install_hook(args.settings)
         print(f"{'Installed' if changed else 'Already installed'}: {path}")
+    elif args.command == "worker":
+        from .worker import Worker, make_sdk_answer
+
+        if args.grace < 0 or args.max_turns < 1 or args.max_budget_usd <= 0:
+            raise ValueError("--grace must be >= 0, --max-turns >= 1 and --max-budget-usd > 0")
+        answer = make_sdk_answer(
+            config, args.cwd, model=args.model, max_turns=args.max_turns, budget=args.max_budget_usd
+        )
+        logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
+        runner = Worker(config, answer, grace_seconds=args.grace * 60)
+        if args.once:
+            print(runner.run_once())
+        else:
+            runner.run(threading.Event())
     elif args.command == "channel":
         logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
         Channel(config).run(serve=args.serve, host=args.host, port=args.port)

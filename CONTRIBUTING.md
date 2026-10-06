@@ -2,7 +2,7 @@
 
 Small, focused pull requests are welcome. Describe the user-visible behavior
 and add a test that would fail without your change. Keep runtime dependencies
-empty and support Python 3.10+, Linux, macOS and Windows. Do not commit tokens,
+empty (the optional `agent` extra for `dotline worker` is the one exception) and support Python 3.10+, Linux, macOS and Windows. Do not commit tokens,
 mailbox data or company logos. See SECURITY.md for private vulnerability reports.
 
 From the project root:

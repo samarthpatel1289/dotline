@@ -1,7 +1,8 @@
 # Security
 
-dotline bridges an authenticated mailbox into an agent session. It does not
-execute messages itself and cannot enforce an agent's decisions.
+dotline bridges an authenticated mailbox into an agent session. Its core does
+not execute messages and cannot enforce an agent's decisions. The optional
+`dotline worker` is the one exception, described under Headless worker below.
 
 ## Threat model
 
@@ -26,6 +27,23 @@ Claims coordinate cooperating sessions; they do not authenticate local users.
 Mailbox files, claims and backups contain plaintext data. There is no encryption
 at rest, per-dot identity, audit retention or filesystem symlink defense against
 an attacker already able to write the owner's private directory.
+
+## Headless worker
+
+`dotline worker` runs a Claude agent on message text with nobody watching, so
+its limits are enforced by the SDK configuration, not only by instructions. It
+has only Read, Grep and Glob, pre-approved in `dontAsk` mode. Every other tool
+is unavailable or denied. A PreToolUse hook denies paths that resolve outside
+`--cwd` (following symlinks) or into the dotline config directory, and absolute,
+`~` or `..` glob patterns. The worker refuses a `--cwd` that contains the config
+directory. It loads no user, project or local settings and no MCP servers, and
+passes prompts verbatim (no `@path` expansion or slash commands).
+
+What remains: anything readable under `--cwd` can be quoted in a reply, and
+replies go to whoever holds the bearer. Prompt injection can steer what it
+reads and says within that directory. Point `--cwd` at a project you are willing
+to describe to the dot, not your home directory, and keep secrets out of it.
+The per-message turn and budget caps limit cost, not exposure.
 
 ## Token and transport handling
 
